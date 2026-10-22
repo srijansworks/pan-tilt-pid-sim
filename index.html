@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teaching a camera to follow a drone | Pan/Tilt PID Simulator</title>
+  <meta name="description" content="An interactive simulator of a pan/tilt camera that follows a moving target, built to learn PID control. Tune it yourself and see what I found.">
+  <meta name="theme-color" content="#f6f0e6">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="progress" id="progress" aria-hidden="true"></div>
+
+  <nav class="nav" aria-label="Sections">
+    <a class="brand" href="#top">PID pan/tilt</a>
+    <div class="nav-links">
+      <a href="#lab">Try it</a>
+      <a href="#tests">What I tested</a>
+      <a href="#learned">What I learned</a>
+      <a href="#next">My projects</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero" id="top">
+    <div class="hero-text">
+      <p class="eyebrow">A control-theory experiment</p>
+      <h1>Teaching a camera to <em>follow a drone</em></h1>
+      <p class="lede">I'm building a camera that sits on the ground and turns to keep my drone in the picture. Before touching real motors, I built this simulator to figure out how to make it turn smoothly. You can play with it below.</p>
+      <div class="hero-cta">
+        <a class="btn primary" href="#lab">Try the simulator</a>
+        <a class="btn" href="#tests">See what I found</a>
+      </div>
+    </div>
+    <div class="hero-stage">
+      <canvas id="heroStage" aria-label="3D view of a pan/tilt camera on a stand following a drone"></canvas>
+      <p class="stage-hint">Drag to turn the view</p>
+    </div>
+    <a class="scroll-cue" href="#what" aria-label="Scroll down"><span></span></a>
+  </header>
+
+  <main>
+    <!-- WHAT IS THIS -->
+    <section class="section" id="what">
+      <div class="wrap">
+        <p class="eyebrow reveal">The idea</p>
+        <h2 class="reveal">Three things to know</h2>
+        <div class="trio">
+          <article class="tile reveal">
+            <span class="tile-num">1</span>
+            <h3>The job</h3>
+            <p>A camera sits on two small motors. One turns it left and right (<strong>pan</strong>). The other tilts it up and down (<strong>tilt</strong>). Its job is to keep my drone in the middle of the picture.</p>
+          </article>
+          <article class="tile reveal" style="--d:.1s">
+            <span class="tile-num">2</span>
+            <h3>The problem</h3>
+            <p>The camera can tell how far off it is from the drone. But if it turns too slowly it falls behind. If it turns too hard it flies past the drone, swings back, and shakes.</p>
+          </article>
+          <article class="tile reveal" style="--d:.2s">
+            <span class="tile-num">3</span>
+            <h3>The fix: PID</h3>
+            <p>PID is a simple rule for how hard to turn. It looks at <strong>how far off</strong> the camera is right now (P), <strong>how long</strong> it has been off (I), and <strong>how fast</strong> the gap is changing (D).</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- STICKY STORY: P, I, D -->
+    <section class="story" id="parts" aria-label="What P, I and D do">
+      <div class="story-sticky">
+        <div class="wrap story-grid">
+          <div class="story-copy">
+            <p class="eyebrow">Meet the three parts</p>
+            <div class="story-steps">
+              <article class="step is-active" data-step="0">
+                <h3><span class="badge p">P</span> Push in proportion to the gap</h3>
+                <p>Far from the target, push hard. Close, push gently. If P is too small, the camera crawls. If it's too big, it overshoots and shakes. In between is just right.</p>
+              </article>
+              <article class="step" data-step="1">
+                <h3><span class="badge i">I</span> Remember a gap that won't close</h3>
+                <p>My motor has a dead zone: tiny commands do nothing. With a weak P, the camera stops <b id="storyGap0">0.45</b> degrees short and just sits there. I keeps adding up that leftover gap until the motor finally moves. It closed the gap to <b id="storyGap1">0.02</b> degrees.</p>
+              </article>
+              <article class="step" data-step="2">
+                <h3><span class="badge d">D</span> Brake before you get there</h3>
+                <p>D watches how fast the gap is shrinking. If it's closing fast, D eases off so the camera doesn't blow past the target. Same P, with and without D: it swung <b id="storyOs0">28</b>% past without D, and only <b id="storyOs1">4</b>% with it.</p>
+              </article>
+            </div>
+            <div class="dots" aria-hidden="true"><i class="on"></i><i></i><i></i></div>
+          </div>
+          <div class="story-chart">
+            <p class="chart-title" id="storyTitle">Camera angle after the target jumps 20 degrees</p>
+            <canvas id="storyCanvas" aria-label="Chart showing how P, I and D change the camera's response"></canvas>
+            <ul class="key" id="storyKey"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LAB -->
+    <section class="section lab" id="lab">
+      <div class="wrap">
+        <p class="eyebrow reveal">Try it yourself</p>
+        <h2 class="reveal">The simulator</h2>
+        <p class="sub reveal">The red drone moves along a path. The camera (dark box on the stand) tries to keep it inside the glowing frame. Drag the 3D view to look around. Change the sliders and watch what happens.</p>
+
+        <div class="lab-grid">
+          <div class="lab-main">
+            <div class="panel stage-panel reveal">
+              <div class="panel-head">
+                <span id="status" class="chip" role="status">Following the figure-8</span>
+                <span class="lock" id="lockChip">Locked on</span>
+              </div>
+              <canvas id="labStage" aria-label="3D view of the camera head tracking the drone"></canvas>
+            </div>
+
+            <div class="panel plots reveal">
+              <div class="panel-head">
+                <h3>Where the drone is vs. where the camera points</h3>
+                <div class="seg small" role="radiogroup" aria-label="Axis to plot">
+                  <label><input type="radio" name="axis" value="pan" checked><span>Left/right</span></label>
+                  <label><input type="radio" name="axis" value="tilt"><span>Up/down</span></label>
+                </div>
+              </div>
+              <canvas id="plotAngle" aria-label="Plot of target angle and camera angle over the last 8 seconds"></canvas>
+              <p class="legend"><span class="line target"></span>drone <span class="line actual"></span>camera</p>
+
+              <h3 class="mt">The gap between them (error)</h3>
+              <canvas id="plotErr" aria-label="Plot of pointing error over the last 8 seconds"></canvas>
+              <p class="legend"><span class="line pan"></span>left/right gap <span class="line tilt"></span>up/down gap
+                <span class="muted">&nbsp;| average gap, last 5 s: <strong id="rmsOut">-</strong></span></p>
+            </div>
+          </div>
+
+          <aside class="lab-side">
+            <div class="panel controls reveal">
+              <h3>Controls</h3>
+              <div class="row">
+                <span class="label">Drone path</span>
+                <div class="seg" role="radiogroup" aria-label="Target path">
+                  <label><input type="radio" name="path" value="figure8" checked><span>Figure-8</span></label>
+                  <label><input type="radio" name="path" value="wander"><span>Random</span></label>
+                </div>
+              </div>
+              <div class="slider">
+                <label for="speed"><span>Drone speed</span><span><output id="speedOut">30</output> deg/s</span></label>
+                <input id="speed" type="range" min="5" max="80" step="1" value="30">
+              </div>
+              <div class="slider">
+                <label for="kp"><span><b class="badge p">P</b> Kp: push per degree of gap</span><output id="kpOut">8.0</output></label>
+                <input id="kp" type="range" min="0" max="40" step="0.1" value="8">
+              </div>
+              <div class="slider">
+                <label for="ki"><span><b class="badge i">I</b> Ki: fix leftover gap</span><output id="kiOut">6.0</output></label>
+                <input id="ki" type="range" min="0" max="20" step="0.1" value="6">
+              </div>
+              <div class="slider">
+                <label for="kd"><span><b class="badge d">D</b> Kd: the brake</span><output id="kdOut">0.50</output></label>
+                <input id="kd" type="range" min="0" max="2" step="0.01" value="0.5">
+              </div>
+
+              <p class="label">Quick settings</p>
+              <div class="presets">
+                <button type="button" data-preset="tooLow"><b>Too low</b><small>lazy, falls behind</small></button>
+                <button type="button" data-preset="aggressive"><b>Too aggressive</b><small>shakes</small></button>
+                <button type="button" data-preset="wellTuned"><b>Well tuned</b><small>smooth</small></button>
+              </div>
+
+              <div class="row actions">
+                <button type="button" id="stepBtn" class="primary">Run step test (6 s)</button>
+                <button type="button" id="pauseBtn">Pause</button>
+                <button type="button" id="restartBtn">Restart</button>
+              </div>
+              <p class="hint">Step test: the drone suddenly jumps 20&deg; left/right and 10&deg; up/down. We measure how the camera catches up.</p>
+            </div>
+
+            <div class="panel metrics reveal" aria-label="Results of the last step test">
+              <h3>Last step test</h3>
+              <p id="metricsNote" class="hint">Press "Run step test" to measure these. The numbers come straight from the simulated run.</p>
+              <table>
+                <thead><tr><th></th><th>Left/right</th><th>Up/down</th></tr></thead>
+                <tbody>
+                  <tr><th scope="row">Overshoot</th><td id="mOsPan">-</td><td id="mOsTilt">-</td></tr>
+                  <tr><th scope="row">Settling time</th><td id="mStPan">-</td><td id="mStTilt">-</td></tr>
+                  <tr><th scope="row">Gap left over</th><td id="mSsPan">-</td><td id="mSsTilt">-</td></tr>
+                </tbody>
+              </table>
+              <details>
+                <summary>What do these mean?</summary>
+                <ul>
+                  <li><b>Overshoot:</b> how far past the new spot the camera swung, as a percent of the jump.</li>
+                  <li><b>Settling time:</b> how long until the camera stays within half a degree for good.</li>
+                  <li><b>Gap left over:</b> the average gap during the last second of the run.</li>
+                </ul>
+              </details>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- TESTS -->
+    <section class="section tests" id="tests">
+      <div class="wrap">
+        <p class="eyebrow reveal">What I tested</p>
+        <h2 class="reveal">Four settings, same drone</h2>
+        <p class="sub reveal">I ran four different settings through the same test: the drone jumps 20 degrees to the side and the camera has to catch up. Then I had each one follow the figure-8 for 20 seconds. These numbers are calculated by the simulator in your browser right now, not typed in.</p>
+        <div class="test-grid" id="testGrid"></div>
+
+        <div class="panel wide reveal">
+          <h3>How far off was the camera while following the figure-8?</h3>
+          <p class="hint">Average gap in degrees. Smaller is better.</p>
+          <div class="bars" id="followBars"></div>
+        </div>
+
+        <div class="panel wide reveal">
+          <h3>What if the drone flies faster?</h3>
+          <p class="hint">Same "well tuned" settings, only the drone's speed changes. Average gap in degrees.</p>
+          <div class="bars" id="speedBars"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEARNED -->
+    <section class="section dark" id="learned">
+      <div class="wrap">
+        <p class="eyebrow reveal">What I learned</p>
+        <h2 class="reveal">Five things this showed me</h2>
+        <ol class="learn" id="learnList"></ol>
+      </div>
+    </section>
+
+    <!-- NEXT -->
+    <section class="section" id="next">
+      <div class="wrap">
+        <p class="eyebrow reveal">Why it matters</p>
+        <h2 class="reveal">How I'll use this</h2>
+        <div class="trio">
+          <article class="tile reveal">
+            <h3>My drone-following camera</h3>
+            <p>This is the real target. The simulator guesses a 50 millisecond delay between the camera seeing the drone and the motors reacting. My next step is to measure the real delay and the real motor speed, put those numbers in the simulator, and only then tune on the hardware. I'll start with P only, add D to stop the overshoot, and add I last.</p>
+          </article>
+          <article class="tile reveal" style="--d:.1s">
+            <h3>Other projects that chase something</h3>
+            <p>My Tello person-following project has to keep turning toward a moving person, so I expect the same trade-off there: fast but shaky, or smooth but late. Anything that chases a moving thing will run into it. Now I know what to look for when it goes wrong.</p>
+          </article>
+          <article class="tile reveal" style="--d:.2s">
+            <h3>What I want to try next</h3>
+            <p>Beating the delay by guessing where the drone will be a moment from now. And comparing this to my LunarRL project: there, a computer learned the rule by practice. Here, I tuned the rule by hand. I want to know when each one makes more sense.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- LIMITS -->
+    <section class="section limits" id="limits">
+      <div class="wrap narrow">
+        <p class="eyebrow reveal">Be honest about it</p>
+        <h2 class="reveal">What this simulator leaves out</h2>
+        <ul class="plain reveal">
+          <li>It's a simplified model for learning. It's not a copy of my real rig.</li>
+          <li>The motors here follow speed commands with a small lag, a speed limit, an acceleration limit, a dead zone, and a fixed delay. Real hobby servos have their own inside controller, loose gears, and limited strength.</li>
+          <li>The two axes don't affect each other. A real camera head has weight, balance, and cable drag.</li>
+          <li>The drone is a perfect dot that the camera always sees, plus a bit of random noise. There's no object detection, no lost frames, and no changing light.</li>
+          <li>I haven't measured my real motors yet, so settings that work here will need re-tuning on the real thing.</li>
+          <li>Plain PID only. No guessing where the drone is heading.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>Made by Srijan. Plain HTML, CSS and JavaScript, no libraries. The 3D view is drawn by hand on a canvas.</p>
+      <p><a href="https://cerulean-daffodil-607f14.netlify.app/">My portfolio</a></p>
+    </div>
+  </footer>
+
+  <script src="js/sim-core.js"></script>
+  <script src="js/scene3d.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/story.js"></script>
+</body>
+</html>
